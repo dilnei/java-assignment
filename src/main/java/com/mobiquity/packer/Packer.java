@@ -1,16 +1,15 @@
 package com.mobiquity.packer;
 
 import com.mobiquity.exception.APIException;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -31,30 +30,18 @@ public class Packer {
    * @throws APIException if the file is not found or the content is invalid
    */
   public static String pack(String filePath) throws APIException {
+    // Read the input from the file, process each line, and join the results using Stream API
+    return readFile(filePath).stream()
+        .map(line -> {
+          // Split the line into package weight limit and item list
+          String[] parts = line.split(" : ");
+          int packageLimit = Integer.parseInt(parts[0].trim());
+          List<Item> items = parseItems(parts[1]);
 
-    // Read the input from the file and parse the package weight and item list
-    List<String> lines = readFile(filePath);
-
-    // Create a StringBuilder to store the result
-    StringBuilder result = new StringBuilder();
-
-    // Process each line in the file
-    for (String line : lines) {
-
-      // Split the line into package weight limit and item list
-      String[] parts = line.split(" : ");
-
-      // Parse the package weight limit and items
-      int packageLimit = Integer.parseInt(parts[0].trim());
-
-      // Parse the items
-      List<Item> items = parseItems(parts[1]);
-
-      // Solve the knapsack problem and append the result to the StringBuilder
-      result.append(solveKnapsack(items, packageLimit)).append("\n");
-    }
-
-    return result.toString().trim();
+          // Solve the knapsack problem for each line
+          return solveKnapsack(items, packageLimit);
+        })
+        .collect(Collectors.joining("\n"));
   }
 
   /**
@@ -64,30 +51,17 @@ public class Packer {
    * @return the list of items
    */
   private static List<Item> parseItems(String itemsString) {
-
-    List<Item> items = new ArrayList<>();
-
     // Regex to extract (index, weight, cost)
     Pattern pattern = Pattern.compile("\\((\\d+),(\\d+\\.\\d+),€(\\d+)\\)");
-    Matcher matcher = pattern.matcher(itemsString);
 
-    // Parse each item and add it to the list
-    while (matcher.find()) {
-
-      // Extract the index, weight, and cost of the item
-      int index = Integer.parseInt(matcher.group(1));
-
-      // Convert weight to double
-      double weight = Double.parseDouble(matcher.group(2));
-
-      // Convert cost to integer
-      int cost = Integer.parseInt(matcher.group(3));
-
-      // Add the item to the list
-      items.add(new Item(index, weight, cost));
-    }
-
-    return items;
+    // Use a stream to find all matches and map them to Item objects
+    return pattern.matcher(itemsString)
+        .results()  // Stream of MatchResult
+        .map(match -> new Item(
+            Integer.parseInt(match.group(1)),    // index
+            Double.parseDouble(match.group(2)),  // weight
+            Integer.parseInt(match.group(3))))   // cost
+        .toList();  // Collect the results into a List
   }
 
   /**
@@ -192,32 +166,16 @@ public class Packer {
    * @throws APIException if the file is not found or an error occurs while reading the file
    */
   private static List<String> readFile(String filePath) throws APIException {
-    List<String> lines = new ArrayList<>();
-
-    // Load the file from the classpath using the class loader
     try {
-      // Get the file from the classpath
-      File file = new File(Packer.class.getClassLoader().getResource(filePath).getFile());
+      // Load the file from the classpath using the class loader
+      var resource = Optional.ofNullable(Packer.class.getClassLoader().getResource(filePath))
+          .orElseThrow(() -> new APIException("File not found: " + filePath));
 
-      // Ensure the file exists
-      if (!file.exists()) {
-        throw new APIException("File not found: " + filePath);
-      }
-
-      // Read the file using BufferedReader
-      try (BufferedReader reader = new BufferedReader(
-          new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-
-        String line;
-        while ((line = reader.readLine()) != null) {
-          lines.add(line);
-        }
-      }
-    } catch (IOException | NullPointerException e) {
+      // Read all lines from the file using Files.readAllLines with UTF-8 encoding
+      return Files.readAllLines(Path.of(resource.toURI()), StandardCharsets.UTF_8);
+    } catch (IOException | URISyntaxException e) {
       throw new APIException("Error reading file: " + filePath, e);
     }
-
-    return lines;
   }
 
   public static void main(String[] args) {
