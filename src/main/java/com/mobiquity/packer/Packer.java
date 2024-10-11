@@ -3,8 +3,6 @@ package com.mobiquity.packer;
 import com.mobiquity.exception.APIException;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,12 +13,7 @@ import java.util.stream.Collectors;
 
 public class Packer {
 
-  /**
-   * Private constructor to prevent instantiation of this class.
-   */
-  private Packer() {
-  }
-
+  private final FileReaderService fileReaderService = new FileReaderService();
 
   /**
    * This method reads the file and returns the optimal items for each package.
@@ -29,7 +22,7 @@ public class Packer {
    * @return the optimal items for each package
    * @throws APIException if the file is not found or the content is invalid
    */
-  public static String pack(String filePath) throws APIException {
+  public String pack(String filePath) throws APIException {
     // Read the input from the file, process each line, and join the results using Stream API
     return readFile(filePath).stream()
         .map(line -> {
@@ -50,7 +43,7 @@ public class Packer {
    * @param itemsString the string containing the items
    * @return the list of items
    */
-  private static List<Item> parseItems(String itemsString) {
+  public static List<Item> parseItems(String itemsString) {
     // Regex to extract (index, weight, cost)
     Pattern pattern = Pattern.compile("\\((\\d+),(\\d+\\.\\d+),€(\\d+)\\)");
 
@@ -71,7 +64,7 @@ public class Packer {
    * @param packageLimit the weight limit of the package
    * @return the indices of the selected items as a comma-separated string
    */
-  private static String solveKnapsack(List<Item> items, int packageLimit) {
+  public static String solveKnapsack(List<Item> items, int packageLimit) {
     int n = items.size();
 
     // DP table where dp[i][w] stores the maximum cost with i items and weight limit w
@@ -96,13 +89,14 @@ public class Packer {
         totalWeight[i][w] = totalWeight[i - 1][w];
 
         // If we include the current item and it fits within the weight limit
-        if (currentItem.weight <= w) {
+        if (currentItem.weight() <= w) {
 
           // Calculate the new cost and weight
-          double newCost = dp[i - 1][w - (int) currentItem.weight] + currentItem.cost;
+          double newCost = dp[i - 1][w - (int) currentItem.weight()] + currentItem.cost();
 
           // Calculate the new weight
-          double newWeight = totalWeight[i - 1][w - (int) currentItem.weight] + currentItem.weight;
+          double newWeight =
+              totalWeight[i - 1][w - (int) currentItem.weight()] + currentItem.weight();
 
           // Choose solution with higher cost or lower weight if cost is the same
           if (newCost > dp[i][w] || (newCost == dp[i][w] && newWeight < totalWeight[i][w])) {
@@ -129,16 +123,16 @@ public class Packer {
       Item currentItem = items.get(i - 1);
 
       // Check if the current item is part of the optimal solution
-      if (w >= currentItem.weight &&
+      if (w >= currentItem.weight() &&
 
           // Check if the current item was included in the optimal solution
-          dp[i][w] == dp[i - 1][w - (int) currentItem.weight] + currentItem.cost) {
+          dp[i][w] == dp[i - 1][w - (int) currentItem.weight()] + currentItem.cost()) {
 
         // This item was included, add its index to the list
-        selectedItems.add(currentItem.index);
+        selectedItems.add(currentItem.index());
 
         // Reduce the weight accordingly
-        w -= (int) currentItem.weight;
+        w -= (int) currentItem.weight();
       }
     }
 
@@ -165,25 +159,19 @@ public class Packer {
    * @return the lines of the file as a list of strings
    * @throws APIException if the file is not found or an error occurs while reading the file
    */
-  private static List<String> readFile(String filePath) throws APIException {
+  public List<String> readFile(String filePath) throws APIException {
     try {
       // Load the file from the classpath using the class loader
       var resource = Optional.ofNullable(Packer.class.getClassLoader().getResource(filePath))
           .orElseThrow(() -> new APIException("File not found: " + filePath));
 
       // Read all lines from the file using Files.readAllLines with UTF-8 encoding
-      return Files.readAllLines(Path.of(resource.toURI()), StandardCharsets.UTF_8);
-    } catch (IOException | URISyntaxException e) {
+//      return Files.readAllLines(Path.of(resource.toURI()), StandardCharsets.UTF_8);
+      return fileReaderService.readFile(String.valueOf(Path.of(resource.toURI())));
+    } catch (IOException e) {
       throw new APIException("Error reading file: " + filePath, e);
-    }
-  }
-
-  public static void main(String[] args) {
-    try {
-      String result = pack("example_input");
-      System.out.println(result);
-    } catch (APIException e) {
-      System.err.println("Error: " + e.getMessage());
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
     }
   }
 
