@@ -22,9 +22,9 @@ public class Packer {
    * @return the optimal items for each package
    * @throws APIException if the file is not found or the content is invalid
    */
-  public String pack(String filePath) throws APIException {
+  public static String pack(String filePath) throws APIException {
     // Read the input from the file, process each line, and join the results using Stream API
-    return readFile(filePath).stream()
+    return new Packer().readFile(filePath).stream()
         .map(line -> {
           // Split the line into package weight limit and item list
           String[] parts = line.split(" : ");
@@ -166,12 +166,9 @@ public class Packer {
           .orElseThrow(() -> new APIException("File not found: " + filePath));
 
       // Read all lines from the file using Files.readAllLines with UTF-8 encoding
-//      return Files.readAllLines(Path.of(resource.toURI()), StandardCharsets.UTF_8);
       return fileReaderService.readFile(String.valueOf(Path.of(resource.toURI())));
-    } catch (IOException e) {
+    } catch (IOException | URISyntaxException e) {
       throw new APIException("Error reading file: " + filePath, e);
-    } catch (URISyntaxException e) {
-      throw new RuntimeException(e);
     }
   }
 
